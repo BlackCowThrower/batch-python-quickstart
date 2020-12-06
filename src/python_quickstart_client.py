@@ -1,19 +1,22 @@
 from __future__ import print_function
+
 import datetime
 import io
 import os
 import sys
 import time
+
 import config
+
 try:
     input = raw_input
 except NameError:
     pass
 
-import azure.storage.blob as azureblob
-import azure.batch.batch_service_client as batch
 import azure.batch.batch_auth as batch_auth
+import azure.batch.batch_service_client as batch
 import azure.batch.models as batchmodels
+import azure.storage.blob as azureblob
 
 sys.path.append('.')
 sys.path.append('..')
@@ -97,7 +100,7 @@ def upload_file_to_container(block_blob_client, container_name, file_path):
         container_name,
         blob_name,
         permission=azureblob.BlobPermissions.READ,
-        expiry=datetime.datetime.utcnow() + datetime.timedelta(hours=2))
+        expiry=datetime.datetime.utcnow() + datetime.timedelta(days=1))
 
     sas_url = block_blob_client.make_blob_url(container_name,
                                               blob_name,
@@ -182,35 +185,35 @@ def create_job(batch_service_client, job_id, pool_id):
     batch_service_client.job.add(job)
 
 
-def add_tasks(batch_service_client, job_id, input_files):
+def add_tasks(batch_service_client, job_id, input_files, task_id, command):
     """
     Adds a task for each input file in the collection to the specified job.
 
     :param batch_service_client: A Batch service client.
     :type batch_service_client: `azure.batch.BatchServiceClient`
     :param str job_id: The ID of the job to which to add the tasks.
-    :param list input_files: A collection of input files. One task will be
-     created for each input file.
+    :param list input_files: A collection of input files. One task will be created for each input file.
     :param output_container_sas_token: A SAS token granting write access to
     the specified Azure Blob storage container.
     """
 
-    print('Adding {} tasks to job [{}]...'.format(len(input_files), job_id))
+    print('Adding task to job [{}]...'.format(job_id))
 
     tasks = list()
 
-    for idx, input_file in enumerate(input_files):
-
-        command = "/bin/bash -c \"cat {}\"".format(input_file.file_path)
-        tasks.append(batch.models.TaskAddParameter(
-            id='Task{}'.format(idx),
-            command_line=command,
-            resource_files=[input_file]
-        )
-        )
-
+    #command = "bash ./setup.sh"
+    user = batchmodels.UserIdentity(
+        auto_user=batchmodels.AutoUserSpecification(
+        elevation_level=batchmodels.ElevationLevel.admin,
+        scope=batchmodels.AutoUserScope.task))
+    tasks.append(batch.models.TaskAddParameter(
+        id=task_id,#'Task-{}'.format(int(time.time())),
+        command_line=command,
+        resource_files=input_files,
+        user_identity=user
+    ))
+    
     batch_service_client.task.add_collection(job_id, tasks)
-
 
 def wait_for_tasks_to_complete(batch_service_client, job_id, timeout):
     """
@@ -246,7 +249,7 @@ def wait_for_tasks_to_complete(batch_service_client, job_id, timeout):
                        "timeout period of " + str(timeout))
 
 
-def print_task_output(batch_service_client, job_id, encoding=None):
+def print_task_output(batch_service_client, job_id, encoding="utf-8"):
     """Prints the stdout.txt file for each task in the job.
 
     :param batch_client: The batch client to use.
@@ -258,21 +261,24 @@ def print_task_output(batch_service_client, job_id, encoding=None):
 
     tasks = batch_service_client.task.list(job_id)
 
+    #list.sort(tasks)
+
     for task in tasks:
+        #print(task.id)
+        if(task.id in ["MC-n1000-control2"]):#, "SG-n1000-control"]):
+            node_id = batch_service_client.task.get(
+                job_id, task.id).node_info.node_id
+            print("Task: {}".format(task.id))
+            print("Node: {}".format(node_id))
 
-        node_id = batch_service_client.task.get(
-            job_id, task.id).node_info.node_id
-        print("Task: {}".format(task.id))
-        print("Node: {}".format(node_id))
+            stream = batch_service_client.file.get_from_task(
+                job_id, task.id, config._STANDARD_OUT_FILE_NAME)
 
-        stream = batch_service_client.file.get_from_task(
-            job_id, task.id, config._STANDARD_OUT_FILE_NAME)
-
-        file_text = _read_stream_as_string(
-            stream,
-            encoding)
-        print("Standard output:")
-        print(file_text)
+            file_text = _read_stream_as_string(
+                stream,
+                encoding)
+            #print("Standard output:")
+            print(file_text.encode("utf-8"))
 
 
 def _read_stream_as_string(stream, encoding):
@@ -311,13 +317,17 @@ if __name__ == '__main__':
     # Use the blob client to create the containers in Azure Storage if they
     # don't yet exist.
 
-    input_container_name = 'input'
+    input_container_name = 'tolerance-test'
     blob_client.create_container(input_container_name, fail_on_exist=False)
 
     # The collection of data files that are to be processed by the tasks.
-    input_file_paths = [os.path.join(sys.path[0], 'taskdata0.txt'),
-                        os.path.join(sys.path[0], 'taskdata1.txt'),
-                        os.path.join(sys.path[0], 'taskdata2.txt')]
+    input_file_paths = [os.path.join(sys.path[0], 'AIN-Pacman-Tolerance-0_1.zip'),
+                        os.path.join(sys.path[0], 'AIN-Pacman-Tolerance-0_01.zip'),
+                        os.path.join(sys.path[0], 'AIN-Pacman-Tolerance-0_001.zip'),
+                        os.path.join(sys.path[0], 'AIN-Pacman-Tolerance-0_0001.zip'),
+                        os.path.join(sys.path[0], 'AIN-Pacman-Tolerance-0_00001.zip'),
+                        os.path.join(sys.path[0], 'AIN-Pacman-Tolerance-0_000001.zip'),
+                        os.path.join(sys.path[0], 'setup-gamma.sh')]
 
     # Upload the data files.
     input_files = [
@@ -336,32 +346,48 @@ if __name__ == '__main__':
     try:
         # Create the pool that will contain the compute nodes that will execute the
         # tasks.
-        create_pool(batch_client, config._POOL_ID)
+        #create_pool(batch_client, config._POOL_ID)
 
         # Create the job that will run the tasks.
-        create_job(batch_client, config._JOB_ID, config._POOL_ID)
+        #create_job(batch_client, config._JOB_ID, config._POOL_ID)
 
         # Add the tasks to the job.
-        add_tasks(batch_client, config._JOB_ID, input_files)
 
+        #add_tasks(batch_client, config._JOB_ID, input_files, "SG-n100-tolerance-0_1", "bash ./setup-gamma.sh 100 smallGrid AIN-Pacman-Tolerance-0_1")
+        add_tasks(batch_client, config._JOB_ID, input_files, "SG-n100-tolerance-0_01", "bash ./setup-gamma.sh 100 smallGrid AIN-Pacman-Tolerance-0_01")
+        add_tasks(batch_client, config._JOB_ID, input_files, "SG-n100-tolerance-0_001", "bash ./setup-gamma.sh 100 smallGrid AIN-Pacman-Tolerance-0_001")
+        add_tasks(batch_client, config._JOB_ID, input_files, "SG-n100-tolerance-0_0001", "bash ./setup-gamma.sh 100 smallGrid AIN-Pacman-Tolerance-0_0001")
+        add_tasks(batch_client, config._JOB_ID, input_files, "SG-n100-tolerance-0_00001", "bash ./setup-gamma.sh 100 smallGrid AIN-Pacman-Tolerance-0_00001")
+        add_tasks(batch_client, config._JOB_ID, input_files, "SG-n100-tolerance-0_000001", "bash ./setup-gamma.sh 100 smallGrid AIN-Pacman-Tolerance-0_000001")
+
+        add_tasks(batch_client, config._JOB_ID, input_files, "MC-n100-tolerance-0_1", "bash ./setup-gamma.sh 100 mediumClassic AIN-Pacman-Tolerance-0_1")
+        add_tasks(batch_client, config._JOB_ID, input_files, "MC-n100-tolerance-0_01", "bash ./setup-gamma.sh 100 mediumClassic AIN-Pacman-Tolerance-0_01")
+        add_tasks(batch_client, config._JOB_ID, input_files, "MC-n100-tolerance-0_001", "bash ./setup-gamma.sh 100 mediumClassic AIN-Pacman-Tolerance-0_001")
+        add_tasks(batch_client, config._JOB_ID, input_files, "MC-n100-tolerance-0_0001", "bash ./setup-gamma.sh 100 mediumClassic AIN-Pacman-Tolerance-0_0001")
+        add_tasks(batch_client, config._JOB_ID, input_files, "MC-n100-tolerance-0_00001", "bash ./setup-gamma.sh 100 mediumClassic AIN-Pacman-Tolerance-0_00001")
+        add_tasks(batch_client, config._JOB_ID, input_files, "MC-n100-tolerance-0_000001", "bash ./setup-gamma.sh 100 mediumClassic AIN-Pacman-Tolerance-0_000001")
+
+        #add_tasks(batch_client, config._JOB_ID, input_files, "MC-n1000-control", "bash ./setup.sh 1000 mediumClassic")
+        
         # Pause execution until tasks reach Completed state.
-        wait_for_tasks_to_complete(batch_client,
-                                   config._JOB_ID,
-                                   datetime.timedelta(minutes=30))
+        #wait_for_tasks_to_complete(batch_client,
+        #                           config._JOB_ID,
+        #                           datetime.timedelta(minutes=30))
 
-        print("  Success! All tasks reached the 'Completed' state within the "
-              "specified timeout period.")
+        #print("  Success! All tasks reached the 'Completed' state within the "
+        #      "specified timeout period.")
 
         # Print the stdout.txt and stderr.txt files for each task to the console
-        print_task_output(batch_client, config._JOB_ID)
+        #print_task_output(batch_client, config._JOB_ID)
 
     except batchmodels.BatchErrorException as err:
-        print_batch_exception(err)
-        raise
+        print(err)
+        #print_batch_exception(err)
+        #raise
 
     # Clean up storage resources
-    print('Deleting container [{}]...'.format(input_container_name))
-    blob_client.delete_container(input_container_name)
+    #print('Deleting container [{}]...'.format(input_container_name))
+    #blob_client.delete_container(input_container_name)
 
     # Print out some timing info
     end_time = datetime.datetime.now().replace(microsecond=0)
@@ -371,11 +397,11 @@ if __name__ == '__main__':
     print()
 
     # Clean up Batch resources (if the user so chooses).
-    if query_yes_no('Delete job?') == 'yes':
+    """if query_yes_no('Delete job?') == 'yes':
         batch_client.job.delete(config._JOB_ID)
 
     if query_yes_no('Delete pool?') == 'yes':
         batch_client.pool.delete(config._POOL_ID)
 
     print()
-    input('Press ENTER to exit...')
+    input('Press ENTER to exit...')"""
