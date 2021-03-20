@@ -317,17 +317,14 @@ if __name__ == '__main__':
     # Use the blob client to create the containers in Azure Storage if they
     # don't yet exist.
 
-    input_container_name = 'tolerance-test'
+    input_container_name = 'akprj-files'
     blob_client.create_container(input_container_name, fail_on_exist=False)
 
     # The collection of data files that are to be processed by the tasks.
-    input_file_paths = [os.path.join(sys.path[0], 'AIN-Pacman-Tolerance-0_1.zip'),
-                        os.path.join(sys.path[0], 'AIN-Pacman-Tolerance-0_01.zip'),
-                        os.path.join(sys.path[0], 'AIN-Pacman-Tolerance-0_001.zip'),
-                        os.path.join(sys.path[0], 'AIN-Pacman-Tolerance-0_0001.zip'),
-                        os.path.join(sys.path[0], 'AIN-Pacman-Tolerance-0_00001.zip'),
-                        os.path.join(sys.path[0], 'AIN-Pacman-Tolerance-0_000001.zip'),
-                        os.path.join(sys.path[0], 'setup-gamma.sh')]
+    input_file_paths = [os.path.join(sys.path[0], '000D265253258402560A7EDE0E3A3559FADACA0A2A6FBA663A8F3CD2084931D7.apk'),
+                        os.path.join(sys.path[0], 'androguard-1.9-old-master.zip'),
+                        os.path.join(sys.path[0], 'createCFGsFromAPKs.py'),
+                        os.path.join(sys.path[0], 'setup-akprj.sh')]
 
     # Upload the data files.
     input_files = [
@@ -354,18 +351,7 @@ if __name__ == '__main__':
         # Add the tasks to the job.
 
         #add_tasks(batch_client, config._JOB_ID, input_files, "SG-n100-tolerance-0_1", "bash ./setup-gamma.sh 100 smallGrid AIN-Pacman-Tolerance-0_1")
-        add_tasks(batch_client, config._JOB_ID, input_files, "SG-n100-tolerance-0_01", "bash ./setup-gamma.sh 100 smallGrid AIN-Pacman-Tolerance-0_01")
-        add_tasks(batch_client, config._JOB_ID, input_files, "SG-n100-tolerance-0_001", "bash ./setup-gamma.sh 100 smallGrid AIN-Pacman-Tolerance-0_001")
-        add_tasks(batch_client, config._JOB_ID, input_files, "SG-n100-tolerance-0_0001", "bash ./setup-gamma.sh 100 smallGrid AIN-Pacman-Tolerance-0_0001")
-        add_tasks(batch_client, config._JOB_ID, input_files, "SG-n100-tolerance-0_00001", "bash ./setup-gamma.sh 100 smallGrid AIN-Pacman-Tolerance-0_00001")
-        add_tasks(batch_client, config._JOB_ID, input_files, "SG-n100-tolerance-0_000001", "bash ./setup-gamma.sh 100 smallGrid AIN-Pacman-Tolerance-0_000001")
-
-        add_tasks(batch_client, config._JOB_ID, input_files, "MC-n100-tolerance-0_1", "bash ./setup-gamma.sh 100 mediumClassic AIN-Pacman-Tolerance-0_1")
-        add_tasks(batch_client, config._JOB_ID, input_files, "MC-n100-tolerance-0_01", "bash ./setup-gamma.sh 100 mediumClassic AIN-Pacman-Tolerance-0_01")
-        add_tasks(batch_client, config._JOB_ID, input_files, "MC-n100-tolerance-0_001", "bash ./setup-gamma.sh 100 mediumClassic AIN-Pacman-Tolerance-0_001")
-        add_tasks(batch_client, config._JOB_ID, input_files, "MC-n100-tolerance-0_0001", "bash ./setup-gamma.sh 100 mediumClassic AIN-Pacman-Tolerance-0_0001")
-        add_tasks(batch_client, config._JOB_ID, input_files, "MC-n100-tolerance-0_00001", "bash ./setup-gamma.sh 100 mediumClassic AIN-Pacman-Tolerance-0_00001")
-        add_tasks(batch_client, config._JOB_ID, input_files, "MC-n100-tolerance-0_000001", "bash ./setup-gamma.sh 100 mediumClassic AIN-Pacman-Tolerance-0_000001")
+        add_tasks(batch_client, config._JOB_ID, input_files, "ak-test-13", "bash ./setup-akprj.sh")
 
         #add_tasks(batch_client, config._JOB_ID, input_files, "MC-n1000-control", "bash ./setup.sh 1000 mediumClassic")
         
